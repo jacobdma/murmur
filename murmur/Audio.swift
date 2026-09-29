@@ -9,7 +9,7 @@ import AVFoundation
 import Speech
 
 @concurrent nonisolated func activateAudioSession() async {
-    try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: .defaultToSpeaker)
+    try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowAirPlay])
     try? AVAudioSession.sharedInstance().setActive(true)
 }
 
