@@ -11,36 +11,38 @@ import AVFoundation
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \Note.created, order: .reverse) private var notes: [Note]
+    @Query(filter: #Predicate<Note> { $0.deleted == nil }, sort: \Note.created, order: .reverse) private var notes: [Note]
     @State private var path: [Note] = []
     @State private var recorder: AVAudioRecorder?
     @State private var levels = [Float](repeating: 0, count: 40)
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    ForEach(notes) { note in
-                        NavigationLink(value: note) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(note.title).font(.headline).lineLimit(1)
-                                Text(note.subtitle).font(.subheadline).foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
+            List(notes) { note in
+                NavigationLink(value: note) { NoteRow(note: note) }
+                    .navigationLinkIndicatorVisibility(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .swipeActions {
+                        Button("Delete", systemImage: "trash", role: .destructive) { note.deleted = .now }.tint(.red)
                     }
-                }
-                .padding()
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(Color(.systemGray6))
             .navigationTitle("Memos")
             .navigationDestination(for: Note.self) { NoteView(note: $0) }
+            .toolbar {
+                NavigationLink { DeletedView() } label: { Label("Recently Deleted", systemImage: "trash") }
+            }
             .safeAreaInset(edge: .bottom) { recordBar.padding(.horizontal) }
         }
         .tint(.murmur)
-        .task { await activateAudioSession() }
+        .task {
+            await activateAudioSession()
+            let trash = (try? context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.deleted != nil }))) ?? []
+            for note in trash where note.daysLeft <= 0 { note.purge(from: context) }
+        }
         .task(id: recorder == nil) {
             while let recorder, !Task.isCancelled {
                 recorder.updateMeters()
@@ -102,5 +104,18 @@ struct ContentView: View {
             recorder?.isMeteringEnabled = true
             recorder?.record()
         }
+    }
+}
+
+struct NoteRow: View {
+    let note: Note
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(note.title).font(.headline).lineLimit(1)
+            Text(note.subtitle).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
     }
 }
