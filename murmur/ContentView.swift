@@ -8,30 +8,6 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
-import Speech
-
-@Model final class Note {
-    var text = ""
-    var created = Date.now
-    var audio: String?
-    var transcript: String?
-    var duration: TimeInterval?
-    init(audio: String? = nil, duration: TimeInterval? = nil) { self.audio = audio; self.duration = duration }
-    var url: URL? { audio.map { URL.documentsDirectory.appending(path: $0) } }
-    var title: String { [text, transcript ?? ""].first { !$0.isEmpty } ?? "Voice Memo" }
-    var subtitle: String {
-        let date = created.formatted(date: .abbreviated, time: .shortened)
-        return duration.map { "\(date) · \(format($0))" } ?? date
-    }
-}
-
-extension Color {
-    static let murmur = Color(red: 0.98, green: 0.56, blue: 0.3)
-}
-
-func format(_ t: TimeInterval) -> String {
-    Duration.seconds(t).formatted(.time(pattern: .minuteSecond))
-}
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
@@ -126,53 +102,5 @@ struct ContentView: View {
             recorder?.isMeteringEnabled = true
             recorder?.record()
         }
-    }
-}
-
-@concurrent nonisolated func activateAudioSession() async {
-    try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: .defaultToSpeaker)
-    try? AVAudioSession.sharedInstance().setActive(true)
-}
-
-nonisolated func transcribe(_ url: URL) async -> String? {
-    guard await withCheckedContinuation({ c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) } }),
-          let recognizer = SFSpeechRecognizer() else { return nil }
-    return await withCheckedContinuation { c in
-        recognizer.recognitionTask(with: SFSpeechURLRecognitionRequest(url: url)) { result, error in
-            if error != nil { c.resume(returning: nil) }
-            else if let result, result.isFinal { c.resume(returning: result.bestTranscription.formattedString) }
-        }
-    }
-}
-
-struct NoteView: View {
-    @Bindable var note: Note
-    @State private var player: AVAudioPlayer?
-
-    var body: some View {
-        VStack {
-            if let player {
-                VStack(alignment: .leading) {
-                    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-                        HStack {
-                            Button(player.isPlaying ? "Pause" : "Play", systemImage: player.isPlaying ? "pause.circle.fill" : "play.circle.fill") {
-                                if player.isPlaying { player.pause() } else { player.play() }
-                            }
-                            .labelStyle(.iconOnly).font(.title)
-                            Slider(value: Binding(get: { player.currentTime }, set: { player.currentTime = $0 }), in: 0...player.duration)
-                            Text("\(format(player.currentTime)) / \(format(player.duration))")
-                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                        }
-                    }
-                    Text(note.transcript ?? "Transcribing…").foregroundStyle(.secondary)
-                }
-                .padding()
-                .background(.fill.tertiary, in: .rect(cornerRadius: 16))
-            }
-            TextEditor(text: $note.text).scrollContentBackground(.hidden)
-        }
-        .padding(.horizontal)
-        .background(Color(.systemGray6))
-        .task { player = note.url.flatMap { try? AVAudioPlayer(contentsOf: $0) } }
     }
 }
