@@ -14,12 +14,22 @@ import Speech
 }
 
 nonisolated func transcribe(_ url: URL) async -> String? {
-    guard await withCheckedContinuation({ c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) } }),
-          let recognizer = SFSpeechRecognizer() else { return nil }
-    return await withCheckedContinuation { c in
-        recognizer.recognitionTask(with: SFSpeechURLRecognitionRequest(url: url)) { result, error in
-            if error != nil { c.resume(returning: nil) }
-            else if let result, result.isFinal { c.resume(returning: result.bestTranscription.formattedString) }
+    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: .current) else { return nil }
+    let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+    do {
+        if let download = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await download.downloadAndInstall()
         }
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        async let text = transcriber.results.reduce(into: "") { $0 += String($1.text.characters) }
+        if let end = try await analyzer.analyzeSequence(from: AVAudioFile(forReading: url)) {
+            try await analyzer.finalizeAndFinish(through: end)
+        } else {
+            await analyzer.cancelAndFinishNow()
+        }
+        let transcript = try await text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return transcript.isEmpty ? nil : transcript
+    } catch {
+        return nil
     }
 }
