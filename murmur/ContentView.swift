@@ -15,10 +15,16 @@ struct ContentView: View {
     @State private var path: [Note] = []
     @State private var recorder: AVAudioRecorder?
     @State private var levels = [Float](repeating: 0, count: 40)
+    @State private var query = ""
+    @FocusState private var searching: Bool
+
+    var results: [Note] {
+        query.isEmpty ? notes : notes.filter { [$0.text, $0.transcript ?? ""].contains { $0.localizedStandardContains(query) } }
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
-            List(notes) { note in
+            List(results) { note in
                 NavigationLink(value: note) { NoteRow(note: note) }
                     .navigationLinkIndicatorVisibility(.hidden)
                     .listRowBackground(Color.clear)
@@ -29,13 +35,21 @@ struct ContentView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(Color(.systemGray6))
+            .background(Color(.systemGray6).ignoresSafeArea())
             .navigationTitle("Memos")
             .navigationDestination(for: Note.self) { NoteView(note: $0) }
             .toolbar {
                 NavigationLink { DeletedView() } label: { Label("Recently Deleted", systemImage: "trash") }
             }
-            .safeAreaInset(edge: .bottom) { recordBar.padding(.horizontal) }
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 12) {
+                    if recorder == nil { searchField.transition(.opacity) }
+                    recordBar
+                }
+                .padding(.horizontal)
+                .padding(.bottom, searching ? 12 : 0)
+                .animation(.spring(duration: 0.3, bounce: 0.15), value: recorder == nil)
+            }
         }
         .tint(.murmur)
         .task {
@@ -84,8 +98,19 @@ struct ContentView: View {
         .frame(maxWidth: recorder == nil ? 64 : .infinity).frame(height: 64)
         .background(Color.murmur, in: .rect(cornerRadius: recorder == nil ? 20 : 32))
         .clipShape(.rect(cornerRadius: recorder == nil ? 20 : 32))
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .animation(.spring(duration: 0.3, bounce: 0.15), value: recorder == nil)
+    }
+
+    var searchField: some View {
+        HStack {
+            Image(systemName: "magnifyingglass").foregroundStyle(Color(.placeholderText))
+            TextField("Search", text: $query).submitLabel(.search).focused($searching)
+        }
+        .font(.title3)
+        .padding(.horizontal, 20)
+        .frame(height: 64)
+        .contentShape(.capsule)
+        .onTapGesture { searching = true }
+        .glassEffect(in: .capsule)
     }
 
     func toggleRecording() async {
