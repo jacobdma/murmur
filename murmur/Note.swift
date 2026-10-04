@@ -17,7 +17,12 @@ import SwiftData
     var deleted: Date?
     init(audio: String? = nil, duration: TimeInterval? = nil) { self.audio = audio; self.duration = duration }
     var url: URL? { audio.map { URL.documentsDirectory.appending(path: $0) } }
-    var title: String { [text, transcript ?? ""].first { !$0.isEmpty } ?? "Voice Memo" }
+    var title: String {
+        let source = [text, transcript ?? ""].first { !$0.isEmpty } ?? ""
+        let firstLine = source.split(separator: "\n").first ?? ""
+        let title = NoteLine(firstLine).content.trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? "Voice Memo" : title
+    }
     var daysLeft: Int { 30 - Int(Date.now.timeIntervalSince(deleted ?? .now) / 86400) }
     var subtitle: String {
         let date = created.formatted(date: .abbreviated, time: .shortened)
@@ -28,6 +33,29 @@ import SwiftData
     func purge(from context: ModelContext) {
         if let url { try? FileManager.default.removeItem(at: url) }
         context.delete(self)
+    }
+}
+
+enum NoteLine {
+    case heading(Int, Substring)
+    case bullet(Substring)
+    case text(Substring)
+
+    init(_ line: Substring) {
+        let hashes = line.prefix { $0 == "#" }.count
+        if (1...3).contains(hashes), line.dropFirst(hashes).hasPrefix(" ") {
+            self = .heading(hashes, line.dropFirst(hashes + 1))
+        } else if line.hasPrefix("- ") {
+            self = .bullet(line.dropFirst(2))
+        } else {
+            self = .text(line)
+        }
+    }
+
+    var content: Substring {
+        switch self {
+        case .heading(_, let content), .bullet(let content), .text(let content): content
+        }
     }
 }
 

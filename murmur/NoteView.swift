@@ -12,6 +12,8 @@ import AVFoundation
 struct NoteView: View {
     @Bindable var note: Note
     @State private var player: AVAudioPlayer?
+    @State private var editing = false
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack {
@@ -33,10 +35,47 @@ struct NoteView: View {
                 .padding()
                 .background(.fill.tertiary, in: .rect(cornerRadius: 16))
             }
-            TextEditor(text: $note.text).scrollContentBackground(.hidden)
+            if editing {
+                TextEditor(text: $note.text).scrollContentBackground(.hidden).focused($focused).onAppear { focused = true }
+            } else {
+                ScrollView { FormattedText(text: note.text).padding(.vertical) }
+            }
         }
         .padding(.horizontal)
         .background(Color(.systemGray6))
+        .toolbar {
+            if editing {
+                Button(role: .confirm) { editing = false }
+            } else {
+                Button("Edit") { editing = true }
+            }
+        }
         .task { player = note.url.flatMap { try? AVAudioPlayer(contentsOf: $0) } }
+    }
+}
+
+struct FormattedText: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(text.split(separator: "\n", omittingEmptySubsequences: false).enumerated()), id: \.offset) { _, line in
+                switch NoteLine(line) {
+                case .heading(let level, let content):
+                    Text(content).font([Font.title, .title2, .title3][level - 1].bold())
+                        .accessibilityAddTraits(.isHeader)
+                case .bullet(let content):
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("•")
+                        Text(content)
+                    }
+                    .accessibilityElement(children: .combine)
+                case .text(let content):
+                    Text(content)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
     }
 }
