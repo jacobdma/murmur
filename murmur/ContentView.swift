@@ -13,8 +13,10 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<Note> { $0.deleted == nil }, sort: \Note.created, order: .reverse) private var notes: [Note]
     @State private var path: [Note] = []
-    @State private var recorder: AVAudioRecorder?
+    @State private var recorder: Recorder?
     @State private var query = ""
+    @State private var showSettings = false
+    @AppStorage("voiceIsolation") private var voiceIsolation = true
 
     var results: [Note] {
         query.isEmpty ? notes : notes.filter { [$0.text, $0.transcript ?? ""].contains { $0.localizedStandardContains(query) } }
@@ -38,7 +40,9 @@ struct ContentView: View {
             .navigationDestination(for: Note.self) { NoteView(note: $0) }
             .toolbar {
                 NavigationLink { DeletedView() } label: { Label("Recently Deleted", systemImage: "trash") }
+                Button("Settings", systemImage: "gearshape") { showSettings = true }
             }
+            .sheet(isPresented: $showSettings) { SettingsView() }
             .safeAreaInset(edge: .bottom) {
                 BottomBar(query: $query, recorder: recorder) { Task { await toggleRecording() } }
             }
@@ -61,10 +65,7 @@ struct ContentView: View {
             path.append(note)
             note.transcript = await transcribe(recorder.url) ?? "No transcript"
         } else if await AVAudioApplication.requestRecordPermission() {
-            let url = URL.documentsDirectory.appending(path: "\(UUID()).m4a")
-            recorder = try? AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVNumberOfChannelsKey: 1])
-            recorder?.isMeteringEnabled = true
-            recorder?.record()
+            recorder = try? Recorder(isolateVoice: voiceIsolation)
         }
     }
 }

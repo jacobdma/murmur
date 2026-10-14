@@ -6,11 +6,10 @@
 //
 
 import SwiftUI
-import AVFoundation
 
 struct BottomBar: View {
     @Binding var query: String
-    let recorder: AVAudioRecorder?
+    let recorder: Recorder?
     let toggleRecording: () -> Void
     @State private var levels = [Float](repeating: 0, count: 40)
     @FocusState private var searching: Bool
@@ -27,8 +26,7 @@ struct BottomBar: View {
             guard let recorder else { return }
             levels = levels.map { _ in 0 }
             while !Task.isCancelled {
-                recorder.updateMeters()
-                levels = levels.dropFirst() + [max(0, (recorder.averagePower(forChannel: 0) + 50) / 50)]
+                levels = levels.dropFirst() + [max(0, (recorder.power + 50) / 50)]
                 try? await Task.sleep(for: .milliseconds(50))
             }
         }
